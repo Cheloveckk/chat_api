@@ -4,6 +4,7 @@ import (
 	"chat/api/pkg/hello"
 	"log"
 	"net/http"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -15,7 +16,7 @@ var Upg = websocket.Upgrader{
 
 func main() {
 	handler := http.NewServeMux()
-	handler.HandleFunc("/ws")
+	handler.HandleFunc("/ws", handleRequest)
 	hello.HelloHandle(handler)
 	server := &http.Server{
 		Addr:    "localhost:8080",
@@ -32,5 +33,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	ws.WriteJSON("message")
 
 }
