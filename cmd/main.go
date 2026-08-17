@@ -2,6 +2,7 @@ package main
 
 import (
 	"chat/api/pkg/hello"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -34,5 +35,20 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err.Error())
 	}
 	ws.WriteJSON("message")
-
+	go func(ws *websocket.Conn) {
+		var s string
+		for {
+			fmt.Scan(&s)
+			ws.WriteJSON(s)
+		}
+	}(ws)
+	go func(ws *websocket.Conn) {
+		data := map[string]any{}
+		for {
+			err := ws.ReadJSON(&data)
+			if err == nil {
+				fmt.Println(data)
+			}
+		}
+	}(ws)
 }
