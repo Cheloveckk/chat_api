@@ -1,6 +1,7 @@
 package main
 
 import (
+	"chat/api/internal/socket"
 	"chat/api/pkg/hello"
 	"fmt"
 	"log"
@@ -8,12 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 )
-
-var Upg = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
-}
 
 func main() {
 	handler := http.NewServeMux()
@@ -30,7 +25,7 @@ func main() {
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
-	ws, err := Upg.Upgrade(w, r, nil)
+	ws, err := socket.InitSocket(w, r)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -46,7 +41,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		data := map[string]any{}
 		for {
 			err := ws.ReadJSON(&data)
-			if err == nil {
+			if _, ok := err.(*websocket.CloseError); ok == true {
+				ws.Close()
+				break
+			} else if err == nil {
 				fmt.Println(data)
 			}
 		}
