@@ -1,6 +1,8 @@
 package main
 
 import (
+	"chat/api/config"
+	"chat/api/internal/db"
 	"chat/api/internal/socket"
 	"chat/api/pkg/hello"
 	"fmt"
@@ -18,7 +20,16 @@ func main() {
 		Addr:    "localhost:8080",
 		Handler: handler,
 	}
-	err := server.ListenAndServe()
+	conf := config.GetConfig()
+	fmt.Println(conf.DbConfig.Key)
+	dbConn := db.GetDbConn(conf)
+	err := dbConn.Ping()
+	if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Println("Succes")
+	}
+	err = server.ListenAndServe()
 	if err != nil {
 		panic(err.Error())
 	}
