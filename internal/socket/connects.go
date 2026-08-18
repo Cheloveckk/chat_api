@@ -13,8 +13,10 @@ type ShardedMap struct {
 	Shards []ConnsMap
 }
 
-type ConnsMap map[int]*User
+// Using connID
+type ConnsMap map[int]*websocket.Conn
 
+// Using UserID from database
 type UsersMap map[int][]*websocket.Conn
 
 func NewShardedMap(count int, len int) *ShardedMap {
@@ -31,7 +33,7 @@ func NewShardedMap(count int, len int) *ShardedMap {
 
 func (m *ShardedMap) Add(connId int, userId int, ws *websocket.Conn) {
 	shard := connId % m.Count
-	m.Shards[shard][connId] = &User{connId, userId, ws}
+	m.Shards[shard][connId] = ws
 }
 
 func (m *ShardedMap) Delete(id int) {
