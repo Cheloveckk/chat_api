@@ -1,7 +1,9 @@
 package socket
 
 import (
+	"chat/api/internal/send"
 	"chat/api/internal/tasks"
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -13,11 +15,46 @@ type HubMap struct {
 	Hubs  []*Hub
 }
 
+// Create n workers for each hub
+func (hubMap *HubMap) CreateWorkers(n int) {
+	fmt.Println(hubMap.Hubs)
+	for _, h := range hubMap.Hubs {
+		for i := 0; i < n; i++ {
+			go func(h *Hub) {
+				//fmt.Println(h.Ch)
+				for t := range h.Ch {
+					if t.Type == "sendto" {
+						s, err := send.ParseSendTo(t.Data)
+						h.mu.RLock()
+
+						slice := hubMap.GetHub(s.From).Map[s.From]
+						fmt.Println(slice)
+						if err != nil {
+							for _, cl := range slice {
+								if t.From == cl.ConnID {
+									cl.Send <- []byte("request error")
+									break
+								}
+							}
+							continue
+						}
+						for _, cl := range slice {
+							cl.Send <- []byte(s.Message)
+						}
+						h.mu.RUnlock()
+					}
+				}
+			}(h)
+		}
+
+	}
+}
+
 // Keep UsersMap and let interact with clients in this
 type Hub struct {
-	mu      sync.RWMutex
-	ChTasks chan tasks.Task
-	Map     UsersMap
+	mu  sync.RWMutex
+	Ch  chan tasks.Task
+	Map UsersMap
 }
 
 // Using connID
@@ -31,8 +68,8 @@ func NewHubMap(count int, len int) *HubMap {
 	slice := make([]*Hub, 0, count)
 	for i := 0; i < count; i++ {
 		slice = append(slice, &Hub{
-			ChTasks: make(chan tasks.Task, 32),
-			Map:     make(UsersMap, len),
+			Ch:  make(chan tasks.Task, 32),
+			Map: make(UsersMap, len),
 		})
 	}
 	return &HubMap{

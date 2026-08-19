@@ -3,6 +3,7 @@ package socket
 import (
 	jwt "chat/api/internal/JWT"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -16,6 +17,7 @@ var Upg = websocket.Upgrader{
 
 func InitConn(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	userID := jwt.GetID(r)
+	fmt.Println(userID)
 	if userID == 0 {
 		return nil, errors.New("not autharisated")
 	}

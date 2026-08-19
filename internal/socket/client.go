@@ -27,10 +27,11 @@ func (client *Client) ReadWorker(ch chan tasks.Task) {
 	var err error
 	for {
 		err = client.Conn.ReadJSON(&data)
+		data.From = client.ConnID
 		if _, ok := err.(*websocket.CloseError); ok == true {
 			return
 		} else if err != nil {
-			log.Fatalln(err.Error())
+			client.Send <- []byte("request error")
 		} else {
 			ch <- data
 		}
@@ -39,7 +40,7 @@ func (client *Client) ReadWorker(ch chan tasks.Task) {
 func (client *Client) WriteWorker() {
 	var err error
 	for data := range client.Send {
-		err = client.Conn.WriteJSON(data)
+		err = client.Conn.WriteMessage(websocket.BinaryMessage, data)
 		if _, ok := err.(*websocket.CloseError); ok == true {
 			return
 		} else if err != nil {

@@ -31,7 +31,7 @@ func main() {
 	} else {
 		fmt.Println("Succes")
 	}
-
+	hubMap.CreateWorkers(5)
 	err = server.ListenAndServe()
 	if err != nil {
 		panic(err.Error())
@@ -44,6 +44,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err.Error())
 	}
 	cl.Conn.WriteJSON("message")
-	cl.StartWork(hubMap.GetHub(cl.UserID).ChTasks)
+	cl.StartWork(hubMap.GetHub(cl.UserID).Ch)
 	hubMap.AddClient(cl)
 }
