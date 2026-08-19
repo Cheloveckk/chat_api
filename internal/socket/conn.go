@@ -12,7 +12,7 @@ var Upg = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func InitSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
+func InitConn(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	ws, err := Upg.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, err
@@ -21,7 +21,7 @@ func InitSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error)
 	if err != nil {
 		return nil, err
 	}
-	return ws, nil
+	return &Client{}, nil
 }
 func SetSettings(ws *websocket.Conn) (*websocket.Conn, error) {
 	return ws, nil

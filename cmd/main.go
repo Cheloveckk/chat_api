@@ -36,18 +36,18 @@ func main() {
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
-	ws, err := socket.InitSocket(w, r)
+	client, err := socket.InitConn(w, r)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	ws.WriteJSON("message")
+	client.Conn.WriteJSON("message")
 	go func(ws *websocket.Conn) {
 		var s string
 		for {
 			fmt.Scan(&s)
 			ws.WriteJSON(s)
 		}
-	}(ws)
+	}(client.Conn)
 	go func(ws *websocket.Conn) {
 		data := map[string]any{}
 		for {
@@ -59,5 +59,5 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				fmt.Println(data)
 			}
 		}
-	}(ws)
+	}(client.Conn)
 }

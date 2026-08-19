@@ -1,42 +1,92 @@
 package socket
 
-//Unuse
 import (
-	"chat/api/internal/work"
+	"chat/api/internal/tasks"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-type ShardedMap struct {
-	Work   chan work.WorkType
-	Count  int
-	Shards []ConnsMap
+// Keep sharded  hubs
+type HubMap struct {
+	Count int
+	Hubs  []*Hub
+}
+
+// Keep UsersMap and let interact with clients in this
+type Hub struct {
+	mu    sync.RWMutex
+	tasks chan tasks.Task
+	Map   UsersMap
 }
 
 // Using connID
 type ConnsMap map[int]*websocket.Conn
 
 // Using UserID from database
-type UsersMap map[int][]*websocket.Conn
+type UsersMap map[int][]*Client
 
-func NewShardedMap(count int, len int) *ShardedMap {
-	slice := make([]ConnsMap, 0, count)
+// Count - count of shards (hubs), len - len of shards
+func NewHubMap(count int, len int) *HubMap {
+	slice := make([]*Hub, 0, count)
 	for i := 0; i < count; i++ {
-		slice = append(slice, make(ConnsMap, len))
+		slice = append(slice, &Hub{
+			tasks: make(chan tasks.Task, 32),
+			Map:   make(UsersMap, len),
+		})
 	}
-	return &ShardedMap{
-		Work:   make(chan work.WorkType, 5),
-		Count:  count,
-		Shards: slice,
+	return &HubMap{
+		Count: count,
+		Hubs:  slice,
 	}
 }
 
-func (m *ShardedMap) Add(connId int, userId int, ws *websocket.Conn) {
-	shard := connId % m.Count
-	m.Shards[shard][connId] = ws
+// Get the Hub from HubMap
+func (m *HubMap) GetHub(userID int) *Hub {
+	shard := userID % m.Count
+	h := m.Hubs[shard]
+	return h
 }
 
-func (m *ShardedMap) Delete(id int) {
-	shard := id % m.Count
-	delete(m.Shards[shard], id)
+// Add the connection into the HubMap
+func (m *HubMap) AddConn(connID int, userID int, ws *websocket.Conn) {
+	h := m.GetHub(userID)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Map[userID] = append(h.Map[userID], &Client{
+		ConnID: connID,
+		UserID: userID,
+		Conn:   ws,
+		Send:   make(chan []byte, 16),
+	})
+}
+
+func (m *HubMap) DeleteConn(connID int, userID int) {
+	h := m.GetHub(userID)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for pos, cl := range h.Map[userID] {
+		if cl.ConnID == connID {
+			close(cl.Send)
+			l := len(h.Map[userID])
+			h.Map[userID][pos] = h.Map[userID][l-1]
+			h.Map[userID][l-1] = nil
+		}
+	}
+}
+
+func (m *HubMap) GetClient(connID int, userID int) *Client {
+	h := m.GetHub(userID)
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, cl := range h.Map[userID] {
+		if cl.ConnID == connID {
+			return cl
+		}
+	}
+	return nil
 }

@@ -1,8 +1,8 @@
-package work
+package tasks
 
 import "encoding/json"
 
-type WorkType struct {
+type Task struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
