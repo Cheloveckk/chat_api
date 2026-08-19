@@ -8,12 +8,20 @@ import (
 )
 
 type Client struct {
-	ConnID int
+	ConnID int64
 	UserID int
 	Conn   *websocket.Conn
 	Send   chan []byte
 }
 
+func NewClient(connID int64, userID int, ws *websocket.Conn) *Client {
+	return &Client{
+		ConnID: connID,
+		UserID: userID,
+		Conn:   ws,
+		Send:   make(chan []byte, 16),
+	}
+}
 func (client *Client) ReadWorker(ch chan tasks.Task) {
 	var data tasks.Task
 	var err error

@@ -15,13 +15,13 @@ type HubMap struct {
 
 // Keep UsersMap and let interact with clients in this
 type Hub struct {
-	mu    sync.RWMutex
-	tasks chan tasks.Task
-	Map   UsersMap
+	mu      sync.RWMutex
+	ChTasks chan tasks.Task
+	Map     UsersMap
 }
 
 // Using connID
-type ConnsMap map[int]*websocket.Conn
+type ConnsMap map[int64]*websocket.Conn
 
 // Using UserID from database
 type UsersMap map[int][]*Client
@@ -31,8 +31,8 @@ func NewHubMap(count int, len int) *HubMap {
 	slice := make([]*Hub, 0, count)
 	for i := 0; i < count; i++ {
 		slice = append(slice, &Hub{
-			tasks: make(chan tasks.Task, 32),
-			Map:   make(UsersMap, len),
+			ChTasks: make(chan tasks.Task, 32),
+			Map:     make(UsersMap, len),
 		})
 	}
 	return &HubMap{
@@ -49,35 +49,34 @@ func (m *HubMap) GetHub(userID int) *Hub {
 }
 
 // Add the connection into the HubMap
-func (m *HubMap) AddConn(connID int, userID int, ws *websocket.Conn) {
-	h := m.GetHub(userID)
+func (m *HubMap) AddClient(client *Client) {
+	h := m.GetHub(client.UserID)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.Map[userID] = append(h.Map[userID], &Client{
-		ConnID: connID,
-		UserID: userID,
-		Conn:   ws,
-		Send:   make(chan []byte, 16),
-	})
+
+	h.Map[client.UserID] = append(h.Map[client.UserID], client)
 }
 
-func (m *HubMap) DeleteConn(connID int, userID int) {
+func (m *HubMap) DeleteConn(connID int64, userID int) {
 	h := m.GetHub(userID)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	for pos, cl := range h.Map[userID] {
 		if cl.ConnID == connID {
 			close(cl.Send)
 			l := len(h.Map[userID])
 			h.Map[userID][pos] = h.Map[userID][l-1]
 			h.Map[userID][l-1] = nil
+		} else {
+			delete(h.Map, userID)
 		}
 	}
 }
 
-func (m *HubMap) GetClient(connID int, userID int) *Client {
+func (m *HubMap) GetClient(connID int64, userID int) *Client {
 	h := m.GetHub(userID)
 
 	h.mu.RLock()

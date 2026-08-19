@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-
-	"github.com/gorilla/websocket"
 )
+
+var hubMap = socket.NewHubMap(5, 5)
 
 func main() {
 	handler := http.NewServeMux()
@@ -20,8 +20,10 @@ func main() {
 		Addr:    "localhost:8080",
 		Handler: handler,
 	}
+
 	conf := config.GetConfig()
 	fmt.Println(conf.DbConfig.Key)
+
 	dbConn := db.GetDbConn(conf)
 	err := dbConn.Ping()
 	if err != nil {
@@ -29,6 +31,7 @@ func main() {
 	} else {
 		fmt.Println("Succes")
 	}
+
 	err = server.ListenAndServe()
 	if err != nil {
 		panic(err.Error())
@@ -36,28 +39,11 @@ func main() {
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
-	client, err := socket.InitConn(w, r)
+	cl, err := socket.InitConn(w, r)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	client.Conn.WriteJSON("message")
-	go func(ws *websocket.Conn) {
-		var s string
-		for {
-			fmt.Scan(&s)
-			ws.WriteJSON(s)
-		}
-	}(client.Conn)
-	go func(ws *websocket.Conn) {
-		data := map[string]any{}
-		for {
-			err := ws.ReadJSON(&data)
-			if _, ok := err.(*websocket.CloseError); ok == true {
-				ws.Close()
-				break
-			} else if err == nil {
-				fmt.Println(data)
-			}
-		}
-	}(client.Conn)
+	cl.Conn.WriteJSON("message")
+	cl.StartWork(hubMap.GetHub(cl.UserID).ChTasks)
+	hubMap.AddClient(cl)
 }
