@@ -6,7 +6,6 @@ import (
 	"chat/api/internal/socket"
 	"chat/api/pkg/hello"
 	"fmt"
-	"log"
 	"net/http"
 )
 
@@ -41,9 +40,10 @@ func main() {
 func handleRequest(w http.ResponseWriter, r *http.Request) {
 	cl, err := socket.InitConn(w, r)
 	if err != nil {
-		log.Fatal(err.Error())
+		return
 	}
 	cl.Conn.WriteJSON("message")
 	cl.StartWork(hubMap.GetHub(cl.UserID).Ch)
 	hubMap.AddClient(cl)
+	fmt.Println(cl.ConnID)
 }

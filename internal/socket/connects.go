@@ -1,8 +1,7 @@
 package socket
 
 import (
-	"chat/api/internal/send"
-	"chat/api/internal/tasks"
+	"chat/api/internal/task"
 	"fmt"
 	"sync"
 
@@ -21,27 +20,10 @@ func (hubMap *HubMap) CreateWorkers(n int) {
 	for _, h := range hubMap.Hubs {
 		for i := 0; i < n; i++ {
 			go func(h *Hub) {
-				//fmt.Println(h.Ch)
 				for t := range h.Ch {
-					if t.Type == "sendto" {
-						s, err := send.ParseSendTo(t.Data)
-						h.mu.RLock()
-
-						slice := hubMap.GetHub(s.From).Map[s.From]
-						fmt.Println(slice)
-						if err != nil {
-							for _, cl := range slice {
-								if t.From == cl.ConnID {
-									cl.Send <- []byte("request error")
-									break
-								}
-							}
-							continue
-						}
-						for _, cl := range slice {
-							cl.Send <- []byte(s.Message)
-						}
-						h.mu.RUnlock()
+					err := HandleRequest(hubMap, h, t)
+					if err != nil {
+						HandleError(h, t, err)
 					}
 				}
 			}(h)
@@ -53,22 +35,22 @@ func (hubMap *HubMap) CreateWorkers(n int) {
 // Keep UsersMap and let interact with clients in this
 type Hub struct {
 	mu  sync.RWMutex
-	Ch  chan tasks.Task
+	Ch  chan task.Task
 	Map UsersMap
 }
 
-// Using connID
-type ConnsMap map[int64]*websocket.Conn
-
 // Using UserID from database
 type UsersMap map[int][]*Client
+
+// Using connID
+type ConnsMap map[int64]*websocket.Conn
 
 // Count - count of shards (hubs), len - len of shards
 func NewHubMap(count int, len int) *HubMap {
 	slice := make([]*Hub, 0, count)
 	for i := 0; i < count; i++ {
 		slice = append(slice, &Hub{
-			Ch:  make(chan tasks.Task, 32),
+			Ch:  make(chan task.Task, 32),
 			Map: make(UsersMap, len),
 		})
 	}
@@ -80,7 +62,10 @@ func NewHubMap(count int, len int) *HubMap {
 
 // Get the Hub from HubMap
 func (m *HubMap) GetHub(userID int) *Hub {
-	shard := userID % m.Count
+	fmt.Println(userID, userID-1)
+	shard := (userID) % m.Count
+	fmt.Println(shard)
+
 	h := m.Hubs[shard]
 	return h
 }
@@ -91,8 +76,9 @@ func (m *HubMap) AddClient(client *Client) {
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
-
+	fmt.Println("до добавлени пользователя в срез в хабе", h.Map[client.UserID])
 	h.Map[client.UserID] = append(h.Map[client.UserID], client)
+	fmt.Println("после", h.Map[client.UserID])
 }
 
 func (m *HubMap) DeleteConn(connID int64, userID int) {
@@ -115,7 +101,11 @@ func (m *HubMap) DeleteConn(connID int64, userID int) {
 
 func (m *HubMap) GetClient(connID int64, userID int) *Client {
 	h := m.GetHub(userID)
+	return h.GetClient(connID, userID)
 
+}
+
+func (h *Hub) GetClient(connID int64, userID int) *Client {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 

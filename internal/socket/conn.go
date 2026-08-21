@@ -1,7 +1,7 @@
 package socket
 
 import (
-	jwt "chat/api/internal/JWT"
+	"chat/api/internal/jwt"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,6 +19,7 @@ func InitConn(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	userID := jwt.GetID(r)
 	fmt.Println(userID)
 	if userID == 0 {
+		http.Error(w, "not autharisated", http.StatusUnauthorized)
 		return nil, errors.New("not autharisated")
 	}
 	ws, err := Upg.Upgrade(w, r, nil)

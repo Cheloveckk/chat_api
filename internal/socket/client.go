@@ -1,7 +1,7 @@
 package socket
 
 import (
-	"chat/api/internal/tasks"
+	"chat/api/internal/task"
 	"log"
 
 	"github.com/gorilla/websocket"
@@ -22,16 +22,18 @@ func NewClient(connID int64, userID int, ws *websocket.Conn) *Client {
 		Send:   make(chan []byte, 16),
 	}
 }
-func (client *Client) ReadWorker(ch chan tasks.Task) {
-	var data tasks.Task
+func (client *Client) ReadWorker(ch chan task.Task) {
+	var data task.Task
 	var err error
 	for {
 		err = client.Conn.ReadJSON(&data)
-		data.From = client.ConnID
-		if _, ok := err.(*websocket.CloseError); ok == true {
-			return
-		} else if err != nil {
-			client.Send <- []byte("request error")
+		data.ConnID = client.ConnID
+		if err != nil {
+			if _, ok := err.(*websocket.CloseError); ok == true {
+				return
+			} else {
+				client.Send <- []byte("json request error")
+			}
 		} else {
 			ch <- data
 		}
@@ -40,6 +42,9 @@ func (client *Client) ReadWorker(ch chan tasks.Task) {
 func (client *Client) WriteWorker() {
 	var err error
 	for data := range client.Send {
+		if data == nil {
+			return
+		}
 		err = client.Conn.WriteMessage(websocket.BinaryMessage, data)
 		if _, ok := err.(*websocket.CloseError); ok == true {
 			return
@@ -48,7 +53,7 @@ func (client *Client) WriteWorker() {
 		}
 	}
 }
-func (client *Client) StartWork(ch chan tasks.Task) {
+func (client *Client) StartWork(ch chan task.Task) {
 	go client.ReadWorker(ch)
 	go client.WriteWorker()
 }
