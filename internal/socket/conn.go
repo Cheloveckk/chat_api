@@ -2,8 +2,7 @@ package socket
 
 import (
 	"chat/api/internal/jwt"
-	"errors"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -17,10 +16,9 @@ var Upg = websocket.Upgrader{
 
 func InitConn(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	userID := jwt.GetID(r)
-	fmt.Println(userID)
 	if userID == 0 {
-		http.Error(w, "not autharisated", http.StatusUnauthorized)
-		return nil, errors.New("not autharisated")
+		http.Error(w, "not authorizated", http.StatusUnauthorized)
+		return nil, ErrNotauthorized
 	}
 	ws, err := Upg.Upgrade(w, r, nil)
 	if err != nil {
@@ -28,9 +26,13 @@ func InitConn(w http.ResponseWriter, r *http.Request) (*Client, error) {
 	}
 	ws, err = SetSettings(ws)
 	if err != nil {
+		ws.Close()
 		return nil, err
 	}
-	return NewClient(GetNewID(), int(userID), ws), err
+
+	connID := GetNewID()
+	log.Printf("Подключился user_id: %d, присвоена conn_id: %d", connID, userID)
+	return NewClient(connID, userID, ws), nil
 }
 func SetSettings(ws *websocket.Conn) (*websocket.Conn, error) {
 	return ws, nil

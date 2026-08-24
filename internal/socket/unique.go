@@ -2,8 +2,8 @@ package socket
 
 import "sync/atomic"
 
-var ID int64 = 0
+var ID int32 = 0
 
-func GetNewID() int64 {
-	return atomic.AddInt64(&ID, 1)
+func GetNewID() int {
+	return int(atomic.AddInt32(&ID, 1))
 }

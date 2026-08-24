@@ -43,7 +43,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cl.Conn.WriteJSON("message")
-	cl.StartWork(hubMap.GetHub(cl.UserID).Ch)
+	cl.StartWork(hubMap.GetHub(cl.UserID))
 	hubMap.AddClient(cl)
 	fmt.Println(cl.ConnID)
 }

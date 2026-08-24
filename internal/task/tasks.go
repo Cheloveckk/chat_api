@@ -5,7 +5,7 @@ import (
 )
 
 type Task struct {
-	ConnID int64
+	ConnID int
 	UserID int
 	Type   string          `json:"type"`
 	Data   json.RawMessage `json:"data"`

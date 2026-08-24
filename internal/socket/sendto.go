@@ -3,27 +3,28 @@ package socket
 import (
 	"chat/api/internal/task"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"log"
 )
 
 type SendTo struct {
 	To      int `json:"to"`
 	UserID  int
-	ConnID  int64
+	ConnID  int
 	Message string `json:"message"`
 }
 
-func ParseSendTo(data task.Task) (SendTo, error) {
+func ParseSendTo(task task.Task) (SendTo, error) {
 	var s SendTo
-	err := json.Unmarshal(data.Data, &s)
+	err := json.Unmarshal(task.Data, &s)
 	if err != nil || s.To == 0 {
-		return s, errors.New("incorrect data for command")
+		log.Printf("Ошибка JSON")
+		return s, ErrJSONFormat
 	}
-	s.UserID = data.UserID
-	s.ConnID = data.ConnID
+	s.UserID = task.UserID
+	s.ConnID = task.ConnID
 	fmt.Println("отправить к ", s.To, "отправить от", s.UserID)
-	return s, err
+	return s, nil
 }
 
 func HandleSendTo(hubMap *HubMap, currentHub *Hub, t task.Task) error {
@@ -32,17 +33,31 @@ func HandleSendTo(hubMap *HubMap, currentHub *Hub, t task.Task) error {
 		return err
 	}
 
-	currentHub.mu.RLock()
-	defer currentHub.mu.RUnlock()
-
 	h := hubMap.GetHub(s.To)
-	if h == nil || h.Map == nil {
-		return errors.New("Server connection error")
-	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	slice := h.Map[s.To]
 	fmt.Println(slice)
 	for _, cl := range slice {
-		cl.Send <- []byte(s.Message)
+		err = cl.SafeSend([]byte(s.Message))
+		switch err {
+		case ErrClientChanClosed:
+			return nil
+		case ErrClientChanFull:
+			go func() {
+				select {
+				case h.Unreg <- unregData{connID: cl.ConnID, userID: cl.UserID}:
+					log.Println("Пользователь неактивен")
+				case <-h.Ctx.Done():
+					log.Println("Контекст не текущего хаба отменен")
+				case <-currentHub.Ctx.Done():
+					log.Println("Контекст текущего хаба отменен")
+				}
+			}()
+			return err
+		case nil:
+		}
 	}
+
 	return nil
 }

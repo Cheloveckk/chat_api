@@ -2,7 +2,7 @@ package socket
 
 import (
 	"chat/api/internal/task"
-	"errors"
+	"log"
 )
 
 var TaskMap map[string]TaskFunc = map[string]TaskFunc{
@@ -11,21 +11,37 @@ var TaskMap map[string]TaskFunc = map[string]TaskFunc{
 
 type TaskFunc func(*HubMap, *Hub, task.Task) error
 
-func HandleRequest(hubMap *HubMap, currentHub *Hub, t task.Task) error {
+func HandleRequest(hubMap *HubMap, h *Hub, t task.Task) {
 	f := TaskMap[t.Type]
 	if f == nil {
-		return errors.New("command doesn`t exist")
+		HandleError(h, t, ErrInvalidCommand)
+		return
 	}
-	return f(hubMap, currentHub, t)
+	err := f(hubMap, h, t)
+	if err != nil {
+		return
+	}
+	HandleError(h, t, err)
 }
 
-func HandleError(currentHub *Hub, t task.Task, err error) {
-	currentHub.mu.RLock()
-	cl := currentHub.GetClient(t.ConnID, t.UserID)
-	select {
-	case cl.Send <- []byte(err.Error()):
+func HandleError(h *Hub, t task.Task, err error) {
+	if err == nil {
 		return
-	default:
-		cl.Conn.Close()
 	}
+	cl := h.GetConn(t.ConnID, t.UserID)
+	if cl == nil {
+		return
+	}
+	err = cl.SafeSend([]byte(err.Error()))
+	if err != nil {
+		log.Printf("Пользователь неактивен: %d", t.ConnID)
+		select {
+		case h.Unreg <- unregData{t.ConnID, t.UserID}:
+		case <-h.Ctx.Done():
+		default:
+			cl.Close()
+			cl.Conn.Close()
+		}
+	}
+	return
 }
