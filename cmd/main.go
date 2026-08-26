@@ -2,11 +2,11 @@ package main
 
 import (
 	"chat/api/config"
-	"chat/api/internal/db"
 	"chat/api/internal/socket"
-	"chat/api/pkg/hello"
-	"fmt"
+	"chat/api/pkgs/hello"
+	"log"
 	"net/http"
+	_ "net/http/pprof"
 )
 
 var hubMap = socket.NewHubMap(5, 5)
@@ -21,17 +21,26 @@ func main() {
 	}
 
 	conf := config.GetConfig()
-	fmt.Println(conf.DbConfig.Key)
+	log.Println(conf.DbConfig.Key)
 
-	dbConn := db.GetDbConn(conf)
-	err := dbConn.Ping()
-	if err != nil {
-		panic(err.Error())
-	} else {
-		fmt.Println("Succes")
-	}
+	// dbConn := db.GetDbConn(conf)
+	// err := dbConn.Ping()
+	// if err != nil {
+	// 	panic(err.Error())
+	// } else {
+	//  log.Println("Succes")
+	// }
 	hubMap.CreateWorkers(5)
-	err = server.ListenAndServe()
+
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
+	// go func() {
+	// 	time.Sleep(time.Second * 10)
+	// 	log.Println("TIME OUT")
+	// 	hubMap.StopWork()
+	// }()
+	err := server.ListenAndServe()
 	if err != nil {
 		panic(err.Error())
 	}
@@ -45,5 +54,5 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	cl.Conn.WriteJSON("message")
 	cl.StartWork(hubMap.GetHub(cl.UserID))
 	hubMap.AddClient(cl)
-	fmt.Println(cl.ConnID)
+	log.Println(cl.ConnID)
 }

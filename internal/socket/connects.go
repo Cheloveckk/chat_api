@@ -3,7 +3,6 @@ package socket
 import (
 	"chat/api/internal/task"
 	"context"
-	"fmt"
 	"log"
 	"sync"
 
@@ -61,13 +60,13 @@ func NewHubMap(count int, cap int) *HubMap {
 func (hubMap *HubMap) CreateWorkers(n int) {
 	hubMap.mu.RLock()
 	defer hubMap.mu.RUnlock()
-	fmt.Println(hubMap.Hubs)
+	log.Println(hubMap.Hubs)
 	for _, h := range hubMap.Hubs {
 		for i := 0; i < n; i++ {
 			h.wg.Add(1)
 			go func(h *Hub) {
+				defer h.wg.Done()
 				for {
-					defer h.wg.Done()
 					select {
 					case t, ok := <-h.Tasks:
 						if ok != true {
@@ -84,35 +83,36 @@ func (hubMap *HubMap) CreateWorkers(n int) {
 }
 
 // Get the Hub from HubMap using mutex
-func (m *HubMap) GetHub(userID int) *Hub {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.getHub(userID)
+func (hubMap *HubMap) GetHub(userID int) *Hub {
+	hubMap.mu.RLock()
+	defer hubMap.mu.RUnlock()
+	return hubMap.getHub(userID)
 }
 
 // Get the Hub from HubMap
-func (m *HubMap) getHub(userID int) *Hub {
-	shard := (userID) % m.Count
-	h := m.Hubs[shard]
+func (hubMap *HubMap) getHub(userID int) *Hub {
+	shard := (userID) % hubMap.Count
+	h := hubMap.Hubs[shard]
 	return h
 }
 
 // Add the connection into the HubMap
-func (m *HubMap) AddClient(client *Client) {
-	h := m.GetHub(client.UserID)
+func (hubMap *HubMap) AddClient(client *Client) {
+	h := hubMap.GetHub(client.UserID)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.Map == nil {
+		hubMap.AddClient(client)
 		return
 	}
-	fmt.Println("до добавлени пользователя в срез в хабе", h.Map[client.UserID])
+	log.Println("до добавлени пользователя в срез в хабе", h.Map[client.UserID])
 	h.Map[client.UserID] = append(h.Map[client.UserID], client)
-	fmt.Println("после", h.Map[client.UserID])
+	log.Println("после", h.Map[client.UserID])
 }
 
-func (m *HubMap) DeleteConn(connID int, userID int) {
-	h := m.GetHub(userID)
+func (hubMap *HubMap) DeleteConn(connID int, userID int) {
+	h := hubMap.GetHub(userID)
 	h.mu.Lock()
 
 	h.deleteConn(connID, userID)
@@ -120,10 +120,10 @@ func (m *HubMap) DeleteConn(connID int, userID int) {
 	h.mu.Unlock()
 }
 
-func (m *HubMap) GetConn(connID int, userID int) *Client {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	h := m.getHub(userID)
+func (hubMap *HubMap) GetConn(connID int, userID int) *Client {
+	hubMap.mu.RLock()
+	defer hubMap.mu.RUnlock()
+	h := hubMap.getHub(userID)
 	return h.GetConn(connID, userID)
 }
 
@@ -157,22 +157,26 @@ func (h *Hub) deleteConn(connID, userID int) {
 		return
 	}
 	slice := h.Map[userID]
+	log.Println("slice пользователей с ==id", slice)
+	log.Println("Сравнение id подключения для нахождения неактивного пользователя")
 	for pos, cl := range slice {
-		log.Println("Сравнение id подключения для нахождения неактивного пользователя")
 		if cl.ConnID == connID {
-			cl.Close()
-			cl.Conn.Close()
-
-			l := len(h.Map[userID])
+			cl.CloseSend()
+			cl.CloseConn()
+			l := len(slice)
 			slice[pos] = slice[l-1]
 			slice[l-1] = nil
-			h.Map[userID] = slice[:l-1]
+
 			log.Printf("Удален пользователь с id = %d \n", connID)
+			if len(slice)-1 == 0 {
+				delete(h.Map, userID)
+				log.Printf("все подключения пользователя %d были удалены\n", userID)
+			} else {
+				h.Map[userID] = slice[:l-1]
+			}
+			return
 		}
-		if len(slice) == 0 {
-			delete(h.Map, userID)
-		}
-		return
+
 	}
 }
 
@@ -211,4 +215,15 @@ func (hubMap *HubMap) evacuate(h *Hub) {
 	h.mu.Unlock()
 	h.wg.Done()
 	return
+}
+func (hubMap *HubMap) StopWork() {
+	hubMap.mu.Lock()
+	defer hubMap.mu.Unlock()
+	for pos, h := range hubMap.Hubs {
+		go func(n int, h *Hub) {
+			h.Cancel()
+			h.wg.Wait()
+			log.Printf("Хаб под номеро %d остановил работу\n", n)
+		}(pos, h)
+	}
 }

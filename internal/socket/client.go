@@ -1,7 +1,11 @@
 package socket
 
 import (
+	"chat/api/internal/socket/errs"
 	"chat/api/internal/task"
+	"chat/api/pkgs/myjson"
+	"context"
+	"fmt"
 	"log"
 	"sync"
 
@@ -30,18 +34,18 @@ func (client *Client) SafeSend(data []byte) error {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	if client.isClosed {
-		return ErrClientChanClosed
+		return errs.ErrClientChanClosed
 	}
 	select {
 	case client.Send <- data:
-		log.Println(string(data))
 		return nil
 	default:
-		return ErrClientChanFull
+		return errs.ErrClientChanFull
 	}
 }
 
-func (client *Client) Close() {
+// Close user send channel
+func (client *Client) CloseSend() {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	if client.isClosed {
@@ -50,70 +54,84 @@ func (client *Client) Close() {
 	close(client.Send)
 	return
 }
-func (client *Client) ReadWorker(h *Hub) {
-	defer h.wg.Done()
-	var task task.Task
+
+func (client *Client) CloseConn() {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.Conn.Close()
+	return
+}
+func (client *Client) ReadWorker(ctx context.Context, tasks chan<- task.Task, unreg chan<- unregData) {
+	var readerTask task.ReaderTask
 	var err error
+	defer log.Printf("Читающий поток пользователя connID: %d, userid: %d отключен\n", client.ConnID, client.UserID)
 	for {
-		err = client.Conn.ReadJSON(&task)
-		task.ConnID = client.ConnID
-		task.UserID = client.UserID
-		h.mu.RLock()
-		defer h.mu.RUnlock()
+		err = client.Conn.ReadJSON(&readerTask)
+		
+		readerTask.ConnID = client.ConnID
+		readerTask.UserID = client.UserID
+
+		// Добавить обработку ошибок
+
 		if err != nil {
+			log.Println(err)
 			if _, ok := err.(*websocket.CloseError); ok == true {
 				log.Printf("Пользователь неактивен: %d", client.ConnID)
 				select {
-				case <-h.Ctx.Done():
+				case <-ctx.Done():
+					client.CloseConn()
 					return
-				case h.Unreg <- unregData{connID: task.ConnID, userID: task.UserID}:
-
+				case unreg <- unregData{connID: readerTask.ConnID, userID: readerTask.UserID}:
 				}
 				return
 			} else {
-				client.HandleClientErr(h, ErrJSONFormat)
+				client.HandleClientErr(unreg, fmt.Errorf("ReaderWorker: %w", myjson.ErrJSONFormat))
 			}
 		} else {
 			select {
-			case <-h.Ctx.Done():
-				return
-			case h.Tasks <- task:
+			case <-ctx.Done():
+			case tasks <- task.Task{
+				Type:   readerTask.Type,
+				ConnID: readerTask.ConnID,
+				UserID: readerTask.UserID,
+				Data:   readerTask.Data,
+			}:
 			}
 		}
 	}
 
 }
 
-func (client *Client) WriteWorker(h *Hub) {
-	defer h.wg.Done()
+func (client *Client) WriteWorker(ctx context.Context) {
+	defer log.Printf("Пишущий поток пользователя connID: %d, userid: %d отключен\n", client.ConnID, client.UserID)
+	defer client.CloseConn()
 	var err error
-	for data := range client.Send {
-		if data == nil {
-			return
-		}
-		err = client.Conn.WriteJSON(string(data))
-		if err != nil {
-			client.Conn.Close()
+	for {
+		select {
+		case data := <-client.Send:
+			if data == nil {
+				return
+			}
+			err = client.Conn.WriteMessage(websocket.BinaryMessage, data)
+			if err != nil {
+				return
+			}
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
 func (client *Client) StartWork(h *Hub) {
-	go client.ReadWorker(h)
-	go client.WriteWorker(h)
+	go client.ReadWorker(h.Ctx, h.Tasks, h.Unreg)
+	go client.WriteWorker(h.Ctx)
 }
 
-func (client *Client) HandleClientErr(h *Hub, err error) {
+func (client *Client) HandleClientErr(unreg chan<- unregData, err error) {
 	err = client.SafeSend([]byte(err.Error()))
 	if err != nil {
-		if err == ErrClientChanClosed {
-			return
-		}
-		select {
-		case <-h.Ctx.Done():
-		case h.Unreg <- unregData{client.ConnID, client.UserID}:
-		}
+		unreg <- unregData{connID: client.ConnID, userID: client.UserID}
+		client.CloseConn()
 	}
 	return
 }
