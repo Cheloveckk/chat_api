@@ -1,20 +1,20 @@
-package db
+package mydb
 
 import (
 	"chat/api/config"
-	"database/sql"
 
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
 type Db struct {
-	*sql.DB
+	*sqlx.DB
 }
 
 func GetDbConn(conf *config.Config) *Db {
-	con, err := sql.Open("postgres", conf.DbConfig.Key)
+	db, err := sqlx.Open("postgres", conf.DbConfig.Key)
 	if err != nil {
 		panic(err.Error())
 	}
-	return &Db{DB: con}
+	return &Db{DB: db}
 }

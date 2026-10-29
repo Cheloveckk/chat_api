@@ -34,7 +34,7 @@ type UsersMap map[int][]*Client
 // Using connID
 type ConnsMap map[int]*websocket.Conn
 
-// Count - count of shards (hubs), cap - cap of shards
+// Count - count of shards (hubs), cap - capacity of shards
 func NewHubMap(count int, cap int) *HubMap {
 	slice := make([]*Hub, 0, count)
 	for i := 0; i < count; i++ {

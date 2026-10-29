@@ -8,7 +8,7 @@ import (
 var Counter = 0
 
 func hello(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("test", "hello")
+	w.Header().Set("test", "hell")
 	w.Write([]byte("hello" + strconv.Itoa(Counter)))
 	Counter += 1
 

@@ -23,7 +23,7 @@ func main() {
 	conf := config.GetConfig()
 	log.Println(conf.DbConfig.Key)
 
-	// dbConn := db.GetDbConn(conf)
+	// dbConn := mydb.GetDbConn(conf)
 	// err := dbConn.Ping()
 	// if err != nil {
 	// 	panic(err.Error())
@@ -48,10 +48,12 @@ func main() {
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
 	cl, err := socket.InitConn(w, r)
+
+	err = cl.Conn.WriteJSON("message")
+	cl.CloseConn()
 	if err != nil {
 		return
 	}
-	cl.Conn.WriteJSON("message")
 	cl.StartWork(hubMap.GetHub(cl.UserID))
 	hubMap.AddClient(cl)
 	log.Println(cl.ConnID)

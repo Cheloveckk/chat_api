@@ -2,7 +2,7 @@ package main
 
 import (
 	"chat/api/config"
-	"chat/api/pkgs/mydb"
+	"chat/api/internal/mydb"
 )
 
 func main() {
