@@ -2,7 +2,7 @@ package main
 
 import (
 	"chat/api/config"
-	"chat/api/internal/mydb"
+	"chat/api/pkgs/mydb"
 	"fmt"
 )
 
